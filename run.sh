@@ -13,4 +13,5 @@ fi
 
 # run image in container
 $cmd run -it \
+  -v "$(pwd)" \
   ${@:1}
