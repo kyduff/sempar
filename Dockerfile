@@ -7,7 +7,6 @@ RUN apt-get -y install vim
 # install python dependencies
 RUN pip install --upgrade pip
 
-COPY . .
 
 # create a user etc
 ENV EDITOR vim

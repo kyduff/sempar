@@ -13,5 +13,5 @@ fi
 
 # run image in container
 $cmd run -it \
-  -v "$(pwd)" \
+  -v /users/ms21kjd/projects/sempar:/workspace/sempar \
   ${@:1}
