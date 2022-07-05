@@ -1,3 +1,10 @@
 [submodule "nl2bash"]
 	path = src/utils/nl2bash
 	url = https://github.com/TellinaTool/nl2bash
+[submodule "src/utils/-b"]
+	path = src/utils/-b
+	url = git@github.com:IBM/clai.git
+[submodule "nlc2cmd"]
+	path = src/utils/clai
+	url = git@github.com:IBM/clai.git
+	branch = nlc2cmd
