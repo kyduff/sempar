@@ -7,14 +7,13 @@ RUN apt-get -y install make
 
 # install python dependencies
 RUN pip install --upgrade pip
-RUN pip install torch torchvision
 RUN pip install tensorflow
 
 
 
 # create a user etc
 ENV EDITOR vim
-ENV PYTHONPATH=/workspace/sempar/nl2bash
+ENV PYTHONPATH=/workspace/sempar/src/utils/nl2bash
 # RUN useradd --create-home kyduff
 # RUN usermod -aG sudo kyduff
 # USER kyduff
