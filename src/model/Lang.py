@@ -1,11 +1,14 @@
 import json
 import unicodedata
+import random
 
 from pathlib import Path
 
-from src import MAX_LENGTH
+from src import MAX_LENGTH, SEED
 
 FILEDIR = Path(__file__).parent.resolve()
+
+random.seed(SEED)
 
 
 class Lang:
@@ -86,6 +89,15 @@ def prepare_data(reverse: bool = False, filepath: str = 'data/nl2bash.json'):
   print(f'Trimmed to {len(pairs)} sentence pairs')
   print('Counting words...')
 
+  # Prepare train/test split
+  random.shuffle(pairs)
+  n = int(0.8*len(pairs))
+  train_data = pairs[:n]
+  test_data = pairs[n:]
+
+  print(f'Prepared {len(train_data)} training data')
+  print(f'Prepared {len(test_data)} test data')
+
   for pair in pairs:
     input_lang.add_sentence(pair[0])
     output_lang.add_sentence(pair[1])
@@ -93,4 +105,4 @@ def prepare_data(reverse: bool = False, filepath: str = 'data/nl2bash.json'):
   print('Counted words:')
   print(input_lang.name, input_lang.n_words)
   print(output_lang.name, output_lang.n_words)
-  return input_lang, output_lang, pairs
+  return input_lang, output_lang, train_data, test_data
