@@ -5,10 +5,10 @@ N = 10
 
 
 def run():
-  _, _, pairs = prepare_data()
+  _, _, train, test = prepare_data()
 
   for _ in range(N):
-    pair = random.choice(pairs)
+    pair = random.choice(train)
     print('nlc >', pair[0])
     print('cmd =', pair[1])
     print()
