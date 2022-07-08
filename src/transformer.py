@@ -1,26 +1,45 @@
 import random
+import time
 import torch
+import wandb
 
+from src.utils.clai.utils.metric import metric_utils
 from src.model import tensorsFromPair, triangular_mask, TransformerEncDec
-from src import EOS_TOKEN, HIDDEN_SIZE, LR, MAX_LENGTH, SEED, SOS_TOKEN, device
+from src import BATCH_SIZE, EOS_TOKEN, EPOCHS, HIDDEN_SIZE, LR, MAX_LENGTH, N_HEADS, N_LAYERS, OPTIMIZER, SEED, SOS_TOKEN, device, WANDB
 from src.model.TransformerEncoder import TransformerEnc
 from src.model.TransformerDecoder import TransformerDec
-from src.model.Lang import prepare_data
+from src.model.Lang import prepare_data, Lang
+from src.helpers import asMinutes
 
 from torch import nn, optim
+from tqdm import tqdm
 
 criterion = nn.NLLLoss()
 random.seed(SEED)
 
+if WANDB:
+  wandb.init(project="nl2bash", entity="kyduff")
+  wandb.config = {
+      "learning_rate": LR,
+      "epochs": EPOCHS,
+      "seed": SEED,
+      "optimizer": OPTIMIZER,
+      "batch_size": BATCH_SIZE,
+      "layers": N_LAYERS,
+      "heads": N_HEADS,
+      "type": "TransformerEncDec",
+  }
 
-def train(input_lang, output_lang, model, optimizer, tensor_pairs):
+
+def train_loop(model, optimizer, tensor_pairs, verbose=True):
 
   model.train()
   loss = 0
   n_tokens = model.out_vocab_size
   sos = torch.tensor([[SOS_TOKEN]], device=device)
 
-  for pair in tensor_pairs:
+  iterations = tqdm(tensor_pairs, leave=False) if verbose else tensor_pairs
+  for pair in iterations:
 
     optimizer.zero_grad()
 
@@ -35,15 +54,33 @@ def train(input_lang, output_lang, model, optimizer, tensor_pairs):
     tgt_mask = triangular_mask(y_length).to(device)
 
     pred = model(x, y_input, tgt_mask)
-    pred = pred.view(-1, y_length, n_tokens) # move batch dim first
+    pred = pred.view(-1, y_length, n_tokens)  # move batch dim first
     batch_loss = criterion(pred.squeeze(), y_tgt.squeeze())
 
     batch_loss.backward()
     optimizer.step()
 
+    if WANDB:
+      wandb.log({"loss": batch_loss})
+
     loss += batch_loss.item()
 
   return loss
+
+
+def train(model, optimizer, tensor_pairs, epochs=EPOCHS):
+
+  try:
+
+    loss = 0.
+
+    pbar = tqdm(range(1, epochs + 1))
+    for epoch in pbar:
+      pbar.set_description(f'Epoch {epoch}/{epochs}')
+      loss = train_loop(model, optimizer, tensor_pairs)
+
+  except KeyboardInterrupt:
+    print('Terminating training...')
 
 
 def predict(model, input_tensor):
@@ -73,7 +110,36 @@ def predict(model, input_tensor):
   return decoded_indices
 
 
+def eval(model, test_tensors):
+
+  model.eval()
+  metric_vals = []
+
+  try:
+    for nlc, cmd in tqdm(test_tensors):
+
+      # nlc_tokens = nlc.squeeze().tolist()
+      cmd_tokens = cmd.squeeze().tolist()
+      cmd_words = [output_lang.index2word[tok] for tok in cmd_tokens[:-1]]
+      cmd = ' '.join(cmd_words)
+
+      pred_tokens = predict(model, nlc)
+      pred_cmd = ' '.join(output_lang.index2word[tok] for tok in pred_tokens)
+
+      metric_val = metric_utils.compute_metric(pred_cmd, 1.0, cmd)
+      metric_vals.append(metric_val)
+
+  except KeyboardInterrupt:
+    print('Terminating eval...')
+
+  return metric_vals
+
+
 def main():
+
+  global input_lang
+  global output_lang
+
   input_lang, output_lang, train_data, test_data = prepare_data()
 
   train_tensors = [
@@ -85,16 +151,21 @@ def main():
 
   hidden_size = HIDDEN_SIZE
 
-  encoder = TransformerEnc(input_lang.n_words, hidden_size, 4, 2).to(device)
-  decoder = TransformerDec(output_lang.n_words, hidden_size, 4, 2).to(device)
+  encoder = TransformerEnc(input_lang.n_words, hidden_size, N_HEADS,
+                           N_LAYERS).to(device)
+  decoder = TransformerDec(output_lang.n_words, hidden_size, N_HEADS,
+                           N_LAYERS).to(device)
   model = TransformerEncDec(encoder, decoder).to(device)
 
-  optimizer = optim.SGD(model.parameters(), lr=LR)
+  optimizer = optim.Adam(model.parameters(), lr=LR)
 
-  for _ in range(20):
-    loss = train(input_lang, output_lang, model, optimizer, test_tensors)
+  start = time.time()
+  train(model, optimizer, train_tensors)
+  elapsed = time.time() - start
+  print(f'time: {asMinutes(elapsed)}')
 
-  print(loss)
+  metric_vals = eval(model, test_tensors)
+  print(f'Score: {sum(metric_vals) / len(metric_vals)}')
 
 
 if __name__ == '__main__':
