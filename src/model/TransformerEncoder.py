@@ -15,7 +15,8 @@ class TransformerEnc(nn.Module):
     self.transformer_layer = TransformerEncoderLayer(d_hidden, n_head)
     self.transformer = TransformerEncoder(self.transformer_layer, n_layers)
 
-  def forward(self, src, mask=None):
+  def forward(self, src, mask=None, **kwargs):
     src = self.embedding(src)
-    src = self.transformer(src, mask)
+    src = src.squeeze()
+    src = self.transformer(src, mask, **kwargs)
     return src

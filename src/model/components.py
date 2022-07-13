@@ -1,6 +1,7 @@
 import torch
 
-from src import device, EOS_TOKEN
+from src import BATCH_SIZE, PAD_TOKEN, SOS_TOKEN, device, EOS_TOKEN
+from torch.nn.utils.rnn import pad_sequence
 
 
 def indexesFromSentence(lang, sentence):
@@ -27,3 +28,32 @@ def triangular_mask(size) -> torch.tensor:
   mask = mask.masked_fill(mask == 0, float('-inf'))
   mask = mask.masked_fill(mask == 1, float(0.))
   return mask
+
+
+def batchify(seqs, batch_size=BATCH_SIZE):
+
+  batches = []
+  pad_token = PAD_TOKEN
+
+  for i in range(0, len(seqs), batch_size):
+
+    batch = seqs[i:i + batch_size]
+    x_batch, y_batch = zip(*batch)
+
+    x_padded = pad_sequence(x_batch, padding_value=pad_token).to(device)
+    y_padded = pad_sequence(y_batch, padding_value=pad_token).to(device)
+
+    batches.append((x_padded, y_padded))
+
+  return batches
+
+
+def get_dataloader(seqs, batch_size=BATCH_SIZE):
+
+  sos = torch.tensor([[SOS_TOKEN]], device=device)
+
+  # Move data to device; add SOS and strip EOS tokens
+  seqs = ((x.to(device), y.to(device)) for x, y in seqs)
+  seqs = [(x, torch.cat((sos, y))) for x, y in seqs]
+  
+  return batchify(seqs, batch_size)

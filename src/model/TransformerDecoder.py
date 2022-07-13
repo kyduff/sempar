@@ -19,9 +19,10 @@ class TransformerDec(nn.Module):
     self.out = nn.Linear(d_hidden, vocab_size)
     self.softmax = nn.LogSoftmax(dim=2)
 
-  def forward(self, tgt, memory, tgt_mask=None):
+  def forward(self, tgt, memory, tgt_mask=None, **kwargs):
     tgt = self.embedding(tgt)
-    tgt = self.transformer(tgt, memory, tgt_mask)
+    tgt = tgt.squeeze()
+    tgt = self.transformer(tgt, memory, tgt_mask, **kwargs)
     tgt = self.softmax(self.out(tgt))
     return tgt
 

@@ -4,7 +4,7 @@ import random
 
 from pathlib import Path
 
-from src import MAX_LENGTH, SEED
+from src import EOS_TOKEN, MAX_LENGTH, PAD_TOKEN, SEED, SOS_TOKEN
 
 FILEDIR = Path(__file__).parent.resolve()
 
@@ -17,8 +17,8 @@ class Lang:
     self.name = name
     self.word2index = {}
     self.word2count = {}
-    self.index2word = {0: "SOS", 1: "EOS"}
-    self.n_words = 2  # Count SOS and EOS
+    self.index2word = {PAD_TOKEN: "PAD", SOS_TOKEN: "SOS", EOS_TOKEN: "EOS"}
+    self.n_words = 3  # Count SOS, EOS, PAD and
 
   def add_sentence(self, sentence):
     for word in sentence.split(' '):
@@ -91,7 +91,7 @@ def prepare_data(reverse: bool = False, filepath: str = 'data/nl2bash.json'):
 
   # Prepare train/test split
   random.shuffle(pairs)
-  n = int(0.8*len(pairs))
+  n = int(0.8 * len(pairs))
   train_data = pairs[:n]
   test_data = pairs[n:]
 

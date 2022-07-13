@@ -4,8 +4,8 @@ import torch
 import wandb
 
 from src.utils.clai.utils.metric import metric_utils
-from src.model import tensorsFromPair, triangular_mask, TransformerEncDec
-from src import BATCH_SIZE, EOS_TOKEN, EPOCHS, HIDDEN_SIZE, LR, MAX_LENGTH, N_HEADS, N_LAYERS, OPTIMIZER, SEED, SOS_TOKEN, device, WANDB
+from src.model import tensorsFromPair, triangular_mask, TransformerEncDec, batchify
+from src import BATCH_SIZE, EOS_TOKEN, EPOCHS, HIDDEN_SIZE, LR, MAX_LENGTH, N_GPU, N_HEADS, N_LAYERS, OPTIMIZER, PAD_TOKEN, SEED, SOS_TOKEN, device, WANDB, wandb_config
 from src.model.TransformerEncoder import TransformerEnc
 from src.model.TransformerDecoder import TransformerDec
 from src.model.Lang import prepare_data, Lang
@@ -18,17 +18,7 @@ criterion = nn.NLLLoss()
 random.seed(SEED)
 
 if WANDB:
-  wandb.init(project="nl2bash", entity="kyduff")
-  wandb.config = {
-      "learning_rate": LR,
-      "epochs": EPOCHS,
-      "seed": SEED,
-      "optimizer": OPTIMIZER,
-      "batch_size": BATCH_SIZE,
-      "layers": N_LAYERS,
-      "heads": N_HEADS,
-      "type": "TransformerEncDec",
-  }
+  wandb.init(project="nl2bash", entity="kyduff", config=wandb_config)
 
 
 def train_loop(model, optimizer, tensor_pairs, verbose=True):
@@ -36,7 +26,6 @@ def train_loop(model, optimizer, tensor_pairs, verbose=True):
   model.train()
   loss = 0
   n_tokens = model.out_vocab_size
-  sos = torch.tensor([[SOS_TOKEN]], device=device)
 
   iterations = tqdm(tensor_pairs, leave=False) if verbose else tensor_pairs
   for pair in iterations:
@@ -46,16 +35,28 @@ def train_loop(model, optimizer, tensor_pairs, verbose=True):
     input_tensor, target_tensor = pair
     x, y = input_tensor.to(device), target_tensor.to(device)
 
-    y = torch.cat((sos, y))
     y_input = y[:-1]
     y_tgt = y[1:]
+
+    # Prevent attention to padding
+    src_key_mask = (x == PAD_TOKEN).squeeze().t()
+    tgt_key_mask = torch.logical_or(y_tgt == PAD_TOKEN,
+                                    y_tgt == EOS_TOKEN).squeeze().t()
 
     y_length = y_input.size(0)
     tgt_mask = triangular_mask(y_length).to(device)
 
-    pred = model(x, y_input, tgt_mask)
-    pred = pred.view(-1, y_length, n_tokens)  # move batch dim first
-    batch_loss = criterion(pred.squeeze(), y_tgt.squeeze())
+    pred = model(x,
+                 y_input,
+                 tgt_mask,
+                 src_key_padding_mask=src_key_mask,
+                 tgt_key_padding_mask=tgt_key_mask)
+
+    # expected dimensions for NLLLoss are N,C,s_1,...,s_n
+    pred = pred.view(-1, n_tokens, y_length).squeeze()
+    y_tgt = y_tgt.squeeze().view(-1, y_length)
+
+    batch_loss = criterion(pred, y_tgt)
 
     batch_loss.backward()
     optimizer.step()
@@ -148,6 +149,9 @@ def main():
   test_tensors = [
       tensorsFromPair(input_lang, output_lang, p) for p in test_data
   ]
+
+  train_tensors = batchify(train_tensors)
+  test_tensors = batchify(test_tensors)
 
   hidden_size = HIDDEN_SIZE
 
